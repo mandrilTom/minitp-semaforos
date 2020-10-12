@@ -9,6 +9,7 @@
 
 //creo estructura de semaforos 
 struct semaforos {
+    // Semaforos
     sem_t sem_mezclar;
     sem_t sem_salar;
     sem_t sem_armar_med;
@@ -16,12 +17,10 @@ struct semaforos {
     sem_t sem_armar_ham_carne;
     sem_t sem_armar_ham_pan;
     sem_t sem_armar_ham_extra;
-
     // Mutex
     sem_t salero_mut;
     sem_t plancha_mut;
     sem_t horno_mut;
-    //poner demas semaforos aqui
 };
 
 //creo los pasos con los ingredientes
@@ -64,18 +63,105 @@ void* imprimirAccion(void *data, char *accionIn) {
 }
 
 //funcion para tomar de ejemplo
-void* cortar(void *data) {
+void* picar(void *data) {
 	//creo el nombre de la accion de la funcion 
-	char *accion = "cortar";
+	char *accion = "picar";
 	//creo el puntero para pasarle la referencia de memoria (data) del struct pasado por parametro (la cual es un puntero). 
 	struct parametro *mydata = data;
 	//llamo a la funcion imprimir le paso el struct y la accion de la funcion
 	imprimirAccion(mydata,accion);
 	//uso sleep para simular que que pasa tiempo
-	usleep( 20000 );
-	//doy la señal a la siguiente accion (cortar me habilita mezclar)
+	usleep( 2000000 );
+	//doy la señal a la siguiente accion (picar me habilita mezclar)
     sem_post(&mydata->semaforos_param.sem_mezclar);
 	
+    pthread_exit(NULL);
+}
+
+void* mezclar(void *data) {
+    char *accion = "mezclar";
+    struct parametro *mydata = data;
+    sem_wait(&mydata->semaforos_param.sem_mezclar);
+    imprimirAccion(mydata,accion);
+    usleep( 2000000 );
+    sem_post(&mydata->semaforos_param.sem_salar);
+
+    pthread_exit(NULL);
+}
+
+void* salar(void *data) {
+    char *accion = "salar";
+    struct parametro *mydata = data;
+    sem_wait(&mydata->semaforos_param.sem_mezclar);
+    sem_wait(&mydata->semaforos_param.salero_mut);
+    imprimirAccion(mydata,accion);
+    usleep( 1000000 );
+    sem_post(&mydata->semaforos_param.salero_mut);
+    sem_post(&mydata->semaforos_param.sem_armar_med);
+
+    pthread_exit(NULL);
+}
+
+void* armar_medallones(void *data) {
+    // Deberia editarlo para armar ambos medallones.
+    // Como???.
+    char *accion = "armar medallones";
+    struct parametro *mydata = data;
+    sem_wait(&mydata->semaforos_param.sem_salar);
+    imprimirAccion(mydata,accion);
+    usleep( 4000000 );
+    sem_post(&mydata->semaforos_param.sem_cocinar);
+
+    pthread_exit(NULL);
+}
+
+void* cocinar_medallones(void *data) {
+    // Deberia editarlo para cocinar ambos medallones seguidos.
+    // Como???.
+    char *accion = "cocinar medallones";
+    struct parametro *mydata = data;
+    sem_wait(&mydata->semaforos_param.sem_armar_med);
+    sem_wait(&mydata->semaforos_param.plancha_mut);
+    imprimirAccion(mydata,accion);
+    usleep( 10000000 );
+    sem_post(&mydata->semaforos_param.plancha_mut);
+    sem_post(&mydata->semaforos_param.sem_armar_ham_carne);
+
+    pthread_exit(NULL);
+}
+
+void* hornear_panes(void *data) {
+    char *accion = "hornear panes";
+    struct parametro *mydata = data;
+    sem_wait(&mydata->semaforos_param.horno_mut);
+    imprimirAccion(mydata,accion);
+    usleep( 10000000 );
+    sem_post(&mydata->semaforos_param.sem_armar_ham_pan);
+
+    pthread_exit(NULL);
+}
+
+void* cortar_extras(void *data) {
+    char *accion = "cortar extras";
+    struct parametro *mydata = data;
+    imprimirAccion(mydata,accion);
+    usleep( 2000000 );
+    sem_post(&mydata->semaforos_param.sem_armar_ham_extra);
+
+    pthread_exit(NULL);
+}
+
+void* armar_hamburgesas(void *data) {
+    // Deberia editarlo para armar ambas hamburguesas.
+    // Como???.
+    char *accion = "armar hamburguesas";
+    struct parametro *mydata = data;
+    sem_wait(&mydata->semaforos_param.sem_armar_ham_carne);
+    sem_wait(&mydata->semaforos_param.sem_armar_ham_pan);
+    sem_wait(&mydata->semaforos_param.sem_armar_ham_extra);
+    imprimirAccion(mydata,accion);
+    usleep( 6000000 );
+
     pthread_exit(NULL);
 }
 
@@ -123,7 +209,7 @@ void* ejecutarReceta(void *i) {
 	pthread_data->semaforos_param.horno_mut = horno_mut;
 	
 	//seteo las acciones y los ingredientes (Faltan acciones e ingredientes) ¿Se ve hardcodeado no? ¿Les parece bien?
-    strcpy(pthread_data->pasos_param[0].accion, "cortar");
+    strcpy(pthread_data->pasos_param[0].accion, "picar");
 	strcpy(pthread_data->pasos_param[0].ingredientes[0], "ajo");
     strcpy(pthread_data->pasos_param[0].ingredientes[1], "perejil");
  	strcpy(pthread_data->pasos_param[0].ingredientes[2], "cebolla");
@@ -151,7 +237,7 @@ void* ejecutarReceta(void *i) {
     int rc;
     rc = pthread_create(&p1,                            //identificador unico
                         NULL,                           //atributos del thread
-                        cortar,                         //funcion a ejecutar
+                        picar,                         //funcion a ejecutar
                         pthread_data);                  //parametros de la funcion a ejecutar, pasado por referencia
 	//crear demas hilos aqui
 	
