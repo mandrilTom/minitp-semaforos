@@ -1,0 +1,8 @@
+Picas-ajo|cebolla|perejil
+Mezcar-ajo|cebolla|perejil|carne
+Salar-ajo|cebolla|perejil|carne
+Armar medallones-ajo|cebolla|perejil|carne
+Cocinar-medallon
+Hornear-panes
+Cortar-lechuga|tomate
+Armar hamburguesa-medallon|pan|lechuga|tomate
