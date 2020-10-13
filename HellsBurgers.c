@@ -183,6 +183,13 @@ void* ejecutarReceta(void *i) {
 
 	//variables hilos
 	pthread_t p1; 
+	pthread_t p2; 
+	pthread_t p3; 
+	pthread_t p4; 
+	pthread_t p5; 
+	pthread_t p6; 
+	pthread_t p7; 
+	pthread_t p8; 
 	//crear variables hilos aqui
 	
 	//numero del equipo (casteo el puntero a un int)
@@ -210,7 +217,7 @@ void* ejecutarReceta(void *i) {
 	pthread_data->semaforos_param.plancha_mutex = plancha_mutex;
 	pthread_data->semaforos_param.horno_mutex = horno_mutex;
 	
-    pthread_data->semaforos_param.receta = fopen("receta.txt", "rt");
+    pthread_data->receta = fopen("receta.txt", "rt");
 
 	//seteo las acciones y los ingredientes (Faltan acciones e ingredientes) ¿Se ve hardcodeado no? ¿Les parece bien?
     // strcpy(pthread_data->pasos_param[0].accion, "picar");
@@ -228,8 +235,8 @@ void* ejecutarReceta(void *i) {
     // Esto reemplaza el segmento de codigo anterior.
     // Lee los pasos de la receta de archivo txt.
     char buffer[1024];
-    receta = fopen("receta.txt", "rt");
-    fgets(buffer, 1024, receta);
+    pthread_data->receta = fopen("receta.txt", "rt");
+    fgets(buffer, 1024, pthread_data->receta);
     int param_index = 0;
     int ing_index = 0;
     char * renglon = strtok(buffer, "\n");
@@ -268,11 +275,51 @@ void* ejecutarReceta(void *i) {
                         NULL,                           //atributos del thread
                         picar,                         //funcion a ejecutar
                         pthread_data);                  //parametros de la funcion a ejecutar, pasado por referencia
-	//crear demas hilos aqui
+
+    rc = pthread_create(&p2,                            //identificador unico
+                        NULL,                           //atributos del thread
+                        mezclar,                         //funcion a ejecutar
+                        pthread_data);                  //parametros de la funcion a ejecutar, pasado por referencia
+
+    rc = pthread_create(&p3,                            //identificador unico
+                        NULL,                           //atributos del thread
+                        salar,                         //funcion a ejecutar
+                        pthread_data);                  //parametros de la funcion a ejecutar, pasado por referencia
+
+    rc = pthread_create(&p4,                            //identificador unico
+                        NULL,                           //atributos del thread
+                        armar_medallones,                         //funcion a ejecutar
+                        pthread_data);                  //parametros de la funcion a ejecutar, pasado por referencia
+
+    rc = pthread_create(&p5,                            //identificador unico
+                        NULL,                           //atributos del thread
+                        cocinar_medallones,                         //funcion a ejecutar
+                        pthread_data);                  //parametros de la funcion a ejecutar, pasado por referencia
+
+    rc = pthread_create(&p6,                            //identificador unico
+                        NULL,                           //atributos del thread
+                        hornear_panes,                         //funcion a ejecutar
+                        pthread_data);                  //parametros de la funcion a ejecutar, pasado por referencia
+
+    rc = pthread_create(&p7,                            //identificador unico
+                        NULL,                           //atributos del thread
+                        cortar_extras,                         //funcion a ejecutar
+                        pthread_data);                  //parametros de la funcion a ejecutar, pasado por referencia
+
+    rc = pthread_create(&p8,                            //identificador unico
+                        NULL,                           //atributos del thread
+                        armar_hamburgesas,                         //funcion a ejecutar
+                        pthread_data);                  //parametros de la funcion a ejecutar, pasado por referencia
 	
 	//join de todos los hilos
 	pthread_join (p1,NULL);
-	//crear join de demas hilos
+	pthread_join (p2,NULL);
+	pthread_join (p3,NULL);
+	pthread_join (p4,NULL);
+	pthread_join (p5,NULL);
+	pthread_join (p6,NULL);
+	pthread_join (p7,NULL);
+	pthread_join (p8,NULL);
 
 	//valido que el hilo se alla creado bien 
     if (rc) {
