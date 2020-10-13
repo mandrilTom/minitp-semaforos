@@ -17,10 +17,10 @@ struct semaforos {
     sem_t sem_armar_ham_carne;
     sem_t sem_armar_ham_pan;
     sem_t sem_armar_ham_extra;
-    // Mutex
-    sem_t salero_mut;
-    sem_t plancha_mut;
-    sem_t horno_mut;
+    // "Mutex"
+    sem_t salero_mutex;
+    sem_t plancha_mutex;
+    sem_t horno_mutex;
 };
 
 //creo los pasos con los ingredientes
@@ -34,6 +34,8 @@ struct parametro {
     int equipo_param;
     struct semaforos semaforos_param;
     struct paso pasos_param[8];
+    FILE* receta;
+    FILE* resultado;
 };
 
 //funcion para imprimir las acciones y los ingredientes de la accion
@@ -93,10 +95,10 @@ void* salar(void *data) {
     char *accion = "salar";
     struct parametro *mydata = data;
     sem_wait(&mydata->semaforos_param.sem_mezclar);
-    sem_wait(&mydata->semaforos_param.salero_mut);
+    sem_wait(&mydata->semaforos_param.salero_mutex);
     imprimirAccion(mydata,accion);
     usleep( 1000000 );
-    sem_post(&mydata->semaforos_param.salero_mut);
+    sem_post(&mydata->semaforos_param.salero_mutex);
     sem_post(&mydata->semaforos_param.sem_armar_med);
 
     pthread_exit(NULL);
@@ -121,10 +123,10 @@ void* cocinar_medallones(void *data) {
     char *accion = "cocinar medallones";
     struct parametro *mydata = data;
     sem_wait(&mydata->semaforos_param.sem_armar_med);
-    sem_wait(&mydata->semaforos_param.plancha_mut);
+    sem_wait(&mydata->semaforos_param.plancha_mutex);
     imprimirAccion(mydata,accion);
     usleep( 10000000 );
-    sem_post(&mydata->semaforos_param.plancha_mut);
+    sem_post(&mydata->semaforos_param.plancha_mutex);
     sem_post(&mydata->semaforos_param.sem_armar_ham_carne);
 
     pthread_exit(NULL);
@@ -133,7 +135,7 @@ void* cocinar_medallones(void *data) {
 void* hornear_panes(void *data) {
     char *accion = "hornear panes";
     struct parametro *mydata = data;
-    sem_wait(&mydata->semaforos_param.horno_mut);
+    sem_wait(&mydata->semaforos_param.horno_mutex);
     imprimirAccion(mydata,accion);
     usleep( 10000000 );
     sem_post(&mydata->semaforos_param.sem_armar_ham_pan);
@@ -175,10 +177,10 @@ void* ejecutarReceta(void *i) {
 	sem_t sem_armar_ham_carne;
 	sem_t sem_armar_ham_pan;
 	sem_t sem_armar_ham_extra;
-	sem_t salero_mut;
-	sem_t plancha_mut;
-	sem_t horno_mut;
-	
+	sem_t salero_mutex;
+	sem_t plancha_mutex;
+	sem_t horno_mutex;
+
 	//variables hilos
 	pthread_t p1; 
 	//crear variables hilos aqui
@@ -204,24 +206,51 @@ void* ejecutarReceta(void *i) {
 	pthread_data->semaforos_param.sem_armar_ham_carne = sem_armar_ham_carne;
 	pthread_data->semaforos_param.sem_armar_ham_pan = sem_armar_ham_pan;
 	pthread_data->semaforos_param.sem_armar_ham_extra = sem_armar_ham_extra;
-	pthread_data->semaforos_param.salero_mut = salero_mut;
-	pthread_data->semaforos_param.plancha_mut = plancha_mut;
-	pthread_data->semaforos_param.horno_mut = horno_mut;
+	pthread_data->semaforos_param.salero_mutex = salero_mutex;
+	pthread_data->semaforos_param.plancha_mutex = plancha_mutex;
+	pthread_data->semaforos_param.horno_mutex = horno_mutex;
 	
+    pthread_data->semaforos_param.receta = fopen("receta.txt", "rt");
+
 	//seteo las acciones y los ingredientes (Faltan acciones e ingredientes) ¿Se ve hardcodeado no? ¿Les parece bien?
-    strcpy(pthread_data->pasos_param[0].accion, "picar");
-	strcpy(pthread_data->pasos_param[0].ingredientes[0], "ajo");
-    strcpy(pthread_data->pasos_param[0].ingredientes[1], "perejil");
- 	strcpy(pthread_data->pasos_param[0].ingredientes[2], "cebolla");
+    // strcpy(pthread_data->pasos_param[0].accion, "picar");
+	// strcpy(pthread_data->pasos_param[0].ingredientes[0], "ajo");
+    // strcpy(pthread_data->pasos_param[0].ingredientes[1], "perejil");
+ 	// strcpy(pthread_data->pasos_param[0].ingredientes[2], "cebolla");
 
-	strcpy(pthread_data->pasos_param[1].accion, "mezclar");
-	strcpy(pthread_data->pasos_param[1].ingredientes[0], "ajo");
-    strcpy(pthread_data->pasos_param[1].ingredientes[1], "perejil");
- 	strcpy(pthread_data->pasos_param[1].ingredientes[2], "cebolla");
-	strcpy(pthread_data->pasos_param[1].ingredientes[3], "carne picada");
+	// strcpy(pthread_data->pasos_param[1].accion, "mezclar");
+	// strcpy(pthread_data->pasos_param[1].ingredientes[0], "ajo");
+    // strcpy(pthread_data->pasos_param[1].ingredientes[1], "perejil");
+ 	// strcpy(pthread_data->pasos_param[1].ingredientes[2], "cebolla");
+	// strcpy(pthread_data->pasos_param[1].ingredientes[3], "carne picada");
 	
-	//inicializo los semaforos
+    // Debo fijarme si funciona esto, tal vez le falte algo.
+    // Esto reemplaza el segmento de codigo anterior.
+    // Lee los pasos de la receta de archivo txt.
+    char buffer[1024];
+    receta = fopen("receta.txt", "rt");
+    fgets(buffer, 1024, receta);
+    int param_index = 0;
+    int ing_index = 0;
+    char * renglon = strtok(buffer, "\n");
+    char * instruccion;
+    char * elemento;
+    while (renglon != NULL) {
+        instruccion = strtok(renglon, "-");
+        strcpy(pthread_data->pasos_param[param_index].accion, instruccion);
+        instruccion = strtok(NULL, "-");
+        elemento = strtok(instruccion, "|");
+        ing_index = 0;
+        while (elemento != NULL) {
+            strcpy(pthread_data->pasos_param[param_index].ingredientes[ing_index], elemento);
+            elemento = strtok(NULL, "|");
+            ing_index++;
+        }
+        renglon = strtok(NULL, "\n");
+        param_index++;
+    }
 
+	//inicializo los semaforos
 	sem_init(&(pthread_data->semaforos_param.sem_mezclar),0,0);
 	sem_init(&(pthread_data->semaforos_param.sem_salar),0,0);
 	sem_init(&(pthread_data->semaforos_param.sem_armar_med),0,0);
@@ -229,9 +258,9 @@ void* ejecutarReceta(void *i) {
 	sem_init(&(pthread_data->semaforos_param.sem_armar_ham_carne),0,0);
 	sem_init(&(pthread_data->semaforos_param.sem_armar_ham_pan),0,0);
 	sem_init(&(pthread_data->semaforos_param.sem_armar_ham_extra),0,0);
-	sem_init(&(pthread_data->semaforos_param.salero_mut),0,1);
-	sem_init(&(pthread_data->semaforos_param.plancha_mut),0,1);
-	sem_init(&(pthread_data->semaforos_param.horno_mut),0,1);
+	sem_init(&(pthread_data->semaforos_param.salero_mutex),0,1);
+	sem_init(&(pthread_data->semaforos_param.plancha_mutex),0,1);
+	sem_init(&(pthread_data->semaforos_param.horno_mutex),0,1);
 
 	//creo los hilos a todos les paso el struct creado (el mismo a todos los hilos) ya que todos comparten los semaforos 
     int rc;
@@ -259,10 +288,10 @@ void* ejecutarReceta(void *i) {
 	sem_destroy(&sem_armar_ham_carne);
 	sem_destroy(&sem_armar_ham_pan);
 	sem_destroy(&sem_armar_ham_extra);
-	sem_destroy(&salero_mut);
-	sem_destroy(&plancha_mut);
-	sem_destroy(&horno_mut); 
-	
+	sem_destroy(&salero_mutex);
+	sem_destroy(&plancha_mutex);
+	sem_destroy(&horno_mutex);
+
 	//salida del hilo
 	 pthread_exit(NULL);
 }
