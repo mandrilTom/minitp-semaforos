@@ -7,6 +7,14 @@
 
 #define LIMITE 50
 
+pthread_mutex_t salero_mutex;
+pthread_mutex_t plancha_mutex;
+pthread_mutex_t horno_mutex;
+pthread_mutex_t salida_mutex;
+
+int ganadores[3];
+int indice_ganador;
+
 //creo estructura de semaforos 
 struct semaforos {
     // Semaforos
@@ -17,10 +25,6 @@ struct semaforos {
     sem_t sem_armar_ham_carne;
     sem_t sem_armar_ham_pan;
     sem_t sem_armar_ham_extra;
-    // "Mutex"
-    sem_t salero_mutex;
-    sem_t plancha_mutex;
-    sem_t horno_mutex;
 };
 
 //creo los pasos con los ingredientes
@@ -39,29 +43,27 @@ struct parametro {
 };
 
 //funcion para imprimir las acciones y los ingredientes de la accion
-void* imprimirAccion(void *data, char *accionIn) {
-	struct parametro *mydata = data;
-	//calculo la longitud del array de pasos 
-	int sizeArray = (int)( sizeof(mydata->pasos_param) / sizeof(mydata->pasos_param[0]));
-	//indice para recorrer array de pasos 
-	int i;
-	for(i = 0; i < sizeArray; i ++){
-		//pregunto si la accion del array es igual a la pasada por parametro (si es igual la funcion strcmp devuelve cero)
-		if(strcmp(mydata->pasos_param[i].accion, accionIn) == 0){
-		    printf("\tEquipo %d - accion %s \n " , mydata->equipo_param, mydata->pasos_param[i].accion);
-		    //calculo la longitud del array de ingredientes
-		    int sizeArrayIngredientes = (int)( sizeof(mydata->pasos_param[i].ingredientes) / sizeof(mydata->pasos_param[i].ingredientes[0]) );
-		    //indice para recorrer array de ingredientes
-		    int h;
-		    printf("\tEquipo %d -----------ingredientes : ----------\n",mydata->equipo_param); 
-			for(h = 0; h < sizeArrayIngredientes; h++) {
-				//consulto si la posicion tiene valor porque no se cuantos ingredientes tengo por accion 
-				if(strlen(mydata->pasos_param[i].ingredientes[h]) != 0) {
-					printf("\tEquipo %d ingrediente  %d : %s \n",mydata->equipo_param,h,mydata->pasos_param[i].ingredientes[h]);
-				}
-			}
-		}
-	}
+void* realizarAccion(int equipo, char *accionIn, char *ingrediente, FILE *salida) {
+    pthread_mutex_lock(&salida_mutex);
+    char buffer[128];
+    snprintf(buffer, sizeof(buffer), "Equipo : %d, Accion : %s, Ingrediente : %s", equipo, accionIn, ingrediente);
+    salida = fopen("resultado.txt", "at");
+    fprintf(salida, "%s\n", buffer);
+    fclose(salida);
+    printf("%s\n", buffer);
+    pthread_mutex_unlock(&salida_mutex);
+}
+
+void* accionTerminada(void *data, char *accionIn) {
+    pthread_mutex_lock(&salida_mutex);
+    struct parametro *mydata = data;
+    char buffer[128];
+    snprintf(buffer, sizeof(buffer), "Equipo : %d, Terminado : %s\n", mydata->equipo_param, accionIn);
+    mydata->resultado = fopen("resultado.txt", "at");
+    fprintf(mydata->resultado, "%s\n", buffer);
+    fclose(mydata->resultado);
+    printf("%s\n", buffer);
+    pthread_mutex_unlock(&salida_mutex);
 }
 
 //funcion para tomar de ejemplo
@@ -71,12 +73,16 @@ void* picar(void *data) {
 	//creo el puntero para pasarle la referencia de memoria (data) del struct pasado por parametro (la cual es un puntero). 
 	struct parametro *mydata = data;
 	//llamo a la funcion imprimir le paso el struct y la accion de la funcion
-	imprimirAccion(mydata,accion);
+	realizarAccion(mydata->equipo_param, accion, mydata->pasos_param[0].ingredientes[0], mydata->resultado);
+	usleep( 1000000 );
+	realizarAccion(mydata->equipo_param, accion, mydata->pasos_param[0].ingredientes[1], mydata->resultado);
+	usleep( 1000000 );
+	realizarAccion(mydata->equipo_param, accion, mydata->pasos_param[0].ingredientes[2], mydata->resultado);
 	//uso sleep para simular que que pasa tiempo
-	usleep( 2000000 );
+	usleep( 1000000 );
 	//doy la señal a la siguiente accion (picar me habilita mezclar)
+	accionTerminada(mydata,accion);
     sem_post(&mydata->semaforos_param.sem_mezclar);
-	
     pthread_exit(NULL);
 }
 
@@ -84,36 +90,40 @@ void* mezclar(void *data) {
     char *accion = "Mezclar";
     struct parametro *mydata = data;
     sem_wait(&mydata->semaforos_param.sem_mezclar);
-    imprimirAccion(mydata,accion);
-    usleep( 2000000 );
+    realizarAccion(mydata->equipo_param, accion, mydata->pasos_param[1].ingredientes[0], mydata->resultado);
+    realizarAccion(mydata->equipo_param, accion, mydata->pasos_param[1].ingredientes[1], mydata->resultado);
+	usleep( 2000000 );
+    accionTerminada(mydata,accion);
     sem_post(&mydata->semaforos_param.sem_salar);
-
     pthread_exit(NULL);
 }
 
 void* salar(void *data) {
     char *accion = "Salar";
     struct parametro *mydata = data;
-    sem_wait(&mydata->semaforos_param.sem_mezclar);
-    sem_wait(&mydata->semaforos_param.salero_mutex);
-    imprimirAccion(mydata,accion);
-    usleep( 1000000 );
-    sem_post(&mydata->semaforos_param.salero_mutex);
+    sem_wait(&mydata->semaforos_param.sem_salar);
+    pthread_mutex_lock(&salero_mutex);
+    realizarAccion(mydata->equipo_param, accion, mydata->pasos_param[2].ingredientes[0], mydata->resultado);
+	usleep( 1000000 );
+    accionTerminada(mydata,accion);
+    pthread_mutex_unlock(&salero_mutex);
     sem_post(&mydata->semaforos_param.sem_armar_med);
-
     pthread_exit(NULL);
 }
 
 void* armar_medallones(void *data) {
-    // Deberia editarlo para armar ambos medallones.
-    // Como???.
     char *accion = "Armar medallones";
+    char *priMed = "Armar primer medallon";
+    char *secMed = "Armar segundo medallon";
     struct parametro *mydata = data;
-    sem_wait(&mydata->semaforos_param.sem_salar);
-    imprimirAccion(mydata,accion);
-    usleep( 4000000 );
+    sem_wait(&mydata->semaforos_param.sem_armar_med);
+    realizarAccion(mydata->equipo_param, accion, mydata->pasos_param[3].ingredientes[0], mydata->resultado);
+	usleep( 2000000 );
+    accionTerminada(mydata,priMed);
+    realizarAccion(mydata->equipo_param, accion, mydata->pasos_param[3].ingredientes[0], mydata->resultado);
+	usleep( 2000000 );
+    accionTerminada(mydata,secMed);
     sem_post(&mydata->semaforos_param.sem_cocinar);
-
     pthread_exit(NULL);
 }
 
@@ -121,35 +131,45 @@ void* cocinar_medallones(void *data) {
     // Deberia editarlo para cocinar ambos medallones seguidos.
     // Como???.
     char *accion = "Cocinar";
+    char *priMed = "Cocinar primer medallon";
+    char *secMed = "Cocinar segundo medallon";
     struct parametro *mydata = data;
-    sem_wait(&mydata->semaforos_param.sem_armar_med);
-    sem_wait(&mydata->semaforos_param.plancha_mutex);
-    imprimirAccion(mydata,accion);
-    usleep( 10000000 );
-    sem_post(&mydata->semaforos_param.plancha_mutex);
+    sem_wait(&mydata->semaforos_param.sem_cocinar);
+    pthread_mutex_lock(&plancha_mutex);
+    realizarAccion(mydata->equipo_param, accion, mydata->pasos_param[4].ingredientes[0], mydata->resultado);
+    usleep( 5000000 );
+    accionTerminada(mydata,priMed);
+    pthread_mutex_unlock(&plancha_mutex);
+    pthread_mutex_lock(&plancha_mutex);
+    realizarAccion(mydata->equipo_param, accion, mydata->pasos_param[4].ingredientes[0], mydata->resultado);
+    usleep( 5000000 );
+    accionTerminada(mydata,secMed);
+    pthread_mutex_unlock(&plancha_mutex);
     sem_post(&mydata->semaforos_param.sem_armar_ham_carne);
-
     pthread_exit(NULL);
 }
 
 void* hornear_panes(void *data) {
     char *accion = "Hornear";
     struct parametro *mydata = data;
-    sem_wait(&mydata->semaforos_param.horno_mutex);
-    imprimirAccion(mydata,accion);
+    pthread_mutex_lock(&horno_mutex);
+    realizarAccion(mydata->equipo_param, accion, mydata->pasos_param[5].ingredientes[0], mydata->resultado);
     usleep( 10000000 );
+    accionTerminada(mydata,accion);
+    pthread_mutex_unlock(&horno_mutex);
     sem_post(&mydata->semaforos_param.sem_armar_ham_pan);
-
     pthread_exit(NULL);
 }
 
 void* cortar_extras(void *data) {
     char *accion = "Cortar";
     struct parametro *mydata = data;
-    imprimirAccion(mydata,accion);
-    usleep( 2000000 );
+    realizarAccion(mydata->equipo_param, accion, mydata->pasos_param[6].ingredientes[0], mydata->resultado);
+    usleep( 1000000 );
+    realizarAccion(mydata->equipo_param, accion, mydata->pasos_param[6].ingredientes[1], mydata->resultado);
+    usleep( 1000000 );
+    accionTerminada(mydata,accion);
     sem_post(&mydata->semaforos_param.sem_armar_ham_extra);
-
     pthread_exit(NULL);
 }
 
@@ -157,13 +177,26 @@ void* armar_hamburgesas(void *data) {
     // Deberia editarlo para armar ambas hamburguesas.
     // Como???.
     char *accion = "Armar hamburguesa";
+    char *priHam = "Armar primer hamburgesa";
+    char *secHam = "Armar segunda hamburgesa";
     struct parametro *mydata = data;
     sem_wait(&mydata->semaforos_param.sem_armar_ham_carne);
     sem_wait(&mydata->semaforos_param.sem_armar_ham_pan);
     sem_wait(&mydata->semaforos_param.sem_armar_ham_extra);
-    imprimirAccion(mydata,accion);
-    usleep( 6000000 );
-
+    realizarAccion(mydata->equipo_param, accion, mydata->pasos_param[7].ingredientes[0], mydata->resultado);
+    realizarAccion(mydata->equipo_param, accion, mydata->pasos_param[7].ingredientes[1], mydata->resultado);
+    realizarAccion(mydata->equipo_param, accion, mydata->pasos_param[7].ingredientes[2], mydata->resultado);
+    realizarAccion(mydata->equipo_param, accion, mydata->pasos_param[7].ingredientes[3], mydata->resultado);
+    usleep( 3000000 );
+    accionTerminada(mydata,priHam);
+    realizarAccion(mydata->equipo_param, accion, mydata->pasos_param[7].ingredientes[0], mydata->resultado);
+    realizarAccion(mydata->equipo_param, accion, mydata->pasos_param[7].ingredientes[1], mydata->resultado);
+    realizarAccion(mydata->equipo_param, accion, mydata->pasos_param[7].ingredientes[2], mydata->resultado);
+    realizarAccion(mydata->equipo_param, accion, mydata->pasos_param[7].ingredientes[3], mydata->resultado);
+    usleep( 3000000 );
+    accionTerminada(mydata,secHam);
+    ganadores[indice_ganador] = mydata->equipo_param;
+    indice_ganador++;
     pthread_exit(NULL);
 }
 
@@ -176,9 +209,6 @@ void* ejecutarReceta(void *i) {
 	sem_t sem_armar_ham_carne;
 	sem_t sem_armar_ham_pan;
 	sem_t sem_armar_ham_extra;
-	sem_t salero_mutex;
-	sem_t plancha_mutex;
-	sem_t horno_mutex;
 
 	//variables hilos
 	pthread_t p1; 
@@ -211,21 +241,17 @@ void* ejecutarReceta(void *i) {
 	pthread_data->semaforos_param.sem_armar_ham_carne = sem_armar_ham_carne;
 	pthread_data->semaforos_param.sem_armar_ham_pan = sem_armar_ham_pan;
 	pthread_data->semaforos_param.sem_armar_ham_extra = sem_armar_ham_extra;
-	pthread_data->semaforos_param.salero_mutex = salero_mutex;
-	pthread_data->semaforos_param.plancha_mutex = plancha_mutex;
-	pthread_data->semaforos_param.horno_mutex = horno_mutex;
 	
     pthread_data->receta = fopen("receta.txt", "rt");
 
 	//seteo las acciones y los ingredientes (A PARTIR DEL ARCHIVO TXT)
-    char buffer[1024];
-    fgets(buffer, 1024, pthread_data->receta);
     int param_index = 0;
     int ing_index = 0;
-    char * renglon = strtok(buffer, "\n");
+    char renglon[128];
+    fgets(renglon, 128, pthread_data->receta);
     char * instruccion;
     char * elemento;
-    while (renglon != NULL) {
+    while (param_index < 8) {
         instruccion = strtok(renglon, "-");
         strcpy(pthread_data->pasos_param[param_index].accion, instruccion);
         instruccion = strtok(NULL, "-");
@@ -236,9 +262,11 @@ void* ejecutarReceta(void *i) {
             elemento = strtok(NULL, "|");
             ing_index++;
         }
-        renglon = strtok(NULL, "\n");
+        fgets(renglon, 128, pthread_data->receta);
         param_index++;
     }
+
+    fclose(pthread_data->receta);
 
 	//inicializo los semaforos
 	sem_init(&(pthread_data->semaforos_param.sem_mezclar),0,0);
@@ -248,9 +276,6 @@ void* ejecutarReceta(void *i) {
 	sem_init(&(pthread_data->semaforos_param.sem_armar_ham_carne),0,0);
 	sem_init(&(pthread_data->semaforos_param.sem_armar_ham_pan),0,0);
 	sem_init(&(pthread_data->semaforos_param.sem_armar_ham_extra),0,0);
-	sem_init(&(pthread_data->semaforos_param.salero_mutex),0,1);
-	sem_init(&(pthread_data->semaforos_param.plancha_mutex),0,1);
-	sem_init(&(pthread_data->semaforos_param.horno_mutex),0,1);
 
 	//creo los hilos a todos les paso el struct creado (el mismo a todos los hilos) ya que todos comparten los semaforos 
     int rc;
@@ -318,9 +343,7 @@ void* ejecutarReceta(void *i) {
 	sem_destroy(&sem_armar_ham_carne);
 	sem_destroy(&sem_armar_ham_pan);
 	sem_destroy(&sem_armar_ham_extra);
-	sem_destroy(&salero_mutex);
-	sem_destroy(&plancha_mutex);
-	sem_destroy(&horno_mutex);
+
 
 	//salida del hilo
 	 pthread_exit(NULL);
@@ -337,6 +360,15 @@ int main ()
 	*equipoNombre1 = 1;
 	*equipoNombre2 = 2;
 	*equipoNombre3 = 3;
+
+    FILE *salida = fopen("resultado.txt", "wt");
+    fclose(salida);
+    indice_ganador = 0;
+
+	pthread_mutex_init(&salero_mutex, NULL);
+	pthread_mutex_init(&plancha_mutex, NULL);
+	pthread_mutex_init(&horno_mutex, NULL);
+	pthread_mutex_init(&salida_mutex, NULL);
 
 	//creo las variables los hilos de los equipos
 	pthread_t equipo1; 
@@ -368,6 +400,18 @@ int main ()
 	pthread_join (equipo1,NULL);
 	pthread_join (equipo2,NULL);
 	pthread_join (equipo3,NULL);
+
+    char buffer[128];
+    snprintf(buffer, sizeof(buffer), "¡Ganador Equipo %d!\n", ganadores[0]);
+    salida = fopen("resultado.txt", "at");
+    fprintf(salida, "%s\n", buffer);
+    fclose(salida);
+    printf("%s\n", buffer);
+
+	pthread_mutex_destroy(&salero_mutex);
+	pthread_mutex_destroy(&plancha_mutex);
+	pthread_mutex_destroy(&horno_mutex);
+	pthread_mutex_destroy(&salida_mutex);
 
     pthread_exit(NULL);
 }

@@ -1,7 +1,7 @@
 Picar-ajo|cebolla|perejil
-Mezclar-ajo|cebolla|perejil|carne
-Salar-ajo|cebolla|perejil|carne
-Armar medallones-ajo|cebolla|perejil|carne
+Mezclar-vegetales picados|carne picada
+Salar-mezcla
+Armar medallones-mezcla
 Cocinar-medallon
 Hornear-panes
 Cortar-lechuga|tomate
